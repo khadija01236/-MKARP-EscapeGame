@@ -4,7 +4,105 @@ import axios from 'axios';
 
 function App() {
   // --- ÉTATS (STATES) ---
-  const [code, setCode] = useState('def reparer_systeme(a, b):\n    # Mission : Retourner la somme de a et b\n    return ');
+  const LEVEL_TEMPLATES = {
+    1: [
+      'def reparer_systeme(a, b):',
+      '    # [MKARP] Boot sequence: réparation du cœur de calcul',
+      '    # MISSION : Retourner la somme de a et b',
+      '    # Indice 1 : en Python, l\'addition c\'est +',
+      '    # Indice 2 : return a + b',
+      '    return ',
+      '',
+    ].join('\n'),
+    2: [
+      'def assembler_code(partie_A, partie_B):',
+      '    # [Geek] Forge: assembler deux fragments comme un build CI',
+      '    # MISSION : Retourner la concaténation de partie_A et partie_B',
+      '    # Exemple : "CODE" + "123" -> "CODE123"',
+      '    # Indice 1 : les chaînes se collent avec +',
+      '    # Indice 2 : return partie_A + partie_B',
+      '    return ',
+      '',
+    ].join('\n'),
+    3: [
+      'def alerte_surchauffe(temperature):',
+      '    # [Geek] Réacteur en surchauffe (pense "critical hit")',
+      '    # MISSION : Retourne True si temperature > 100, sinon False',
+      '    # Indice 1 : une comparaison (>) renvoie déjà un booléen',
+      '    # Indice 2 : return temperature > 100',
+      '    return ',
+      '',
+    ].join('\n'),
+    4: [
+      'def compter_objets(inventaire):',
+      '    # [Geek] Inventaire façon RPG: combien d\'items dans le sac ? ',
+      '    # MISSION : Retourner le nombre d\'éléments dans la liste inventaire',
+      '    # Indice 1 : len(...) donne la taille',
+      '    # Indice 2 : return len(inventaire)',
+      '    return ',
+      '',
+    ].join('\n'),
+    5: [
+      'def total_energie(liste_batteries):',
+      '    # [Geek] Barres d\'énergie façon Metroid: total à afficher',
+      '    # MISSION : Retourner la somme des nombres de liste_batteries',
+      '    # Indice 1 : sum(...) additionne une liste de nombres',
+      '    # Indice 2 : return sum(liste_batteries)',
+      '    return ',
+      '',
+    ].join('\n'),
+    6: [
+      'def activer_bouclier(energie):',
+      '    # [Geek] Protocole 42: bouclier ONLINE si énergie suffisante',
+      '    # MISSION : Retourne True si energie >= 42, sinon False',
+      '    # Indice 1 : >= compare deux nombres',
+      '    # Indice 2 : return energie >= 42',
+      '    return ',
+      '',
+    ].join('\n'),
+    7: [
+      'def verifier_konami(sequence):',
+      '    # [Geek] Konami Code: UP UP DOWN DOWN LEFT RIGHT LEFT RIGHT B A',
+      '    # MISSION : Retourne True si sequence est EXACTEMENT ce code, sinon False',
+      '    # Indice 1 : compare la liste à une liste "attendue"',
+      '    # Indice 2 : return sequence == ["UP", ...]',
+      '    return ',
+      '',
+    ].join('\n'),
+    8: [
+      'def choisir_arme(cote):',
+      '    # [Geek] Choix d\'arme: jedi/sith/neutral',
+      '    # MISSION :',
+      '    # - si cote == "jedi" -> "sabre_bleu"',
+      '    # - si cote == "sith" -> "sabre_rouge"',
+      '    # - sinon -> "blaster"',
+      '    # Indice 1 : if / elif / else',
+      '    return ',
+      '',
+    ].join('\n'),
+    9: [
+      'def meilleur_score(scores):',
+      '    # [Geek] Leaderboard arcade: extraire le meilleur score',
+      '    # MISSION : Retourner le maximum de la liste scores',
+      '    # Si la liste est vide, retourne 0',
+      '    # Indice 1 : max(...) donne le plus grand',
+      '    # Indice 2 : pense au cas []',
+      '    return ',
+      '',
+    ].join('\n'),
+    10: [
+      'def normaliser_code_acces(code):',
+      '    # [Geek] SAS d\'accès façon vaisseau: on nettoie le badge',
+      '    # MISSION : Retourne code en MAJUSCULES, sans espaces avant/après',
+      '    # Exemple : "  mkArp-10  " -> "MKARP-10"',
+      '    # Indice 1 : strip() enlève les espaces autour',
+      '    # Indice 2 : upper() met en majuscules',
+      '    return ',
+      '',
+    ].join('\n'),
+  };
+
+  const [code, setCode] = useState(LEVEL_TEMPLATES[1]);
   const [level, setLevel] = useState(1);
   const [timeLeft, setTimeLeft] = useState(600); // 10 minutes
   const [output, setOutput] = useState('');
@@ -40,20 +138,16 @@ function App() {
   };
 
   const checkFlag = () => {
+    const levelString = level.toString().padStart(2, '0');
     // Vérifie si le flag entré correspond au format du niveau actuel
-    if (inputFlag.includes(`FLAG_LVL0${level}_`)) {
-      if (level < 3) {
+    if (inputFlag.includes(`FLAG_LVL${levelString}_`)) {
+      if (level < 10) {
         const nextLevel = level + 1;
+        const nextLevelString = nextLevel.toString().padStart(2, '0');
         setLevel(nextLevel);
         setInputFlag('');
-        setOutput(`ACCÈS NIVEAU 0${nextLevel} AUTORISÉ...`);
-        
-        // Mise à jour de l'énoncé selon le niveau suivant
-        if(nextLevel === 2) {
-            setCode('def inverser_signal(data):\n    # Mission : Inverser la chaîne de caractères\n    return ');
-        } else if (nextLevel === 3) {
-            setCode('def extraire_ip(logs):\n    # Mission : Extraire les adresses IP\n    return ');
-        }
+        setOutput(`ACCÈS NIVEAU ${nextLevelString} AUTORISÉ...`);
+        setCode(LEVEL_TEMPLATES[nextLevel]);
       } else {
         setGameFinished(true);
       }
@@ -70,6 +164,8 @@ function App() {
 
   // Calcul du score exponentiel
   const finalScore = (Math.pow(level, 2) * 100) + timeLeft;
+
+  const levelString = level.toString().padStart(2, '0');
 
   // --- RENDU (UI) ---
   return (
@@ -98,7 +194,7 @@ function App() {
         /* INTERFACE DE JEU (TERMINAL) */
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '2px solid #00ff00', marginBottom: '20px' }}>
-            <span style={{ fontWeight: 'bold' }}>SYSTEM_K-RAMP v1.0.4 - [NIVEAU 0{level}]</span>
+            <span style={{ fontWeight: 'bold' }}>SYSTEM_K-RAMP v1.0.4 - [NIVEAU {levelString}]</span>
             <span style={{ color: timeLeft < 60 ? '#ff0000' : '#00ff00', fontWeight: 'bold', fontSize: '1.2rem' }}>
                 TEMPS RESTANT: {formatTime(timeLeft)}
             </span>
