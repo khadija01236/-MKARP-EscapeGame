@@ -1,11 +1,16 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors'); 
-const { exec } = require('child_process');
+const cors = require('cors');
+const { spawn } = require('child_process');
 const fs = require('fs');
+const fsp = require('fs/promises');
+const os = require('os');
 const path = require('path');
 
 const app = express();
+
+const PORT = Number(process.env.PORT ?? 5000);
+const DOCKER_IMAGE = process.env.DOCKER_IMAGE ?? 'kramp-sandbox';
+const MAX_CODE_CHARS = Number(process.env.MAX_CODE_CHARS ?? 100_000);
 
 const FLAG_OPTIONS = {
     '01': ['GG_PADAWAN', 'GG_NOOBMASTER', 'GG_NEO', 'GG_MARIO'],
@@ -21,68 +26,130 @@ const FLAG_OPTIONS = {
 };
 
 // Middleware
-app.use(cors()); 
-app.use(bodyParser.json());
+app.use(cors());
+app.use(express.json({ limit: '256kb' }));
 
-app.post('/run', (req, res) => {
-    const { code, level } = req.body;
-    
-    // On s'assure que le niveau est au format "01", "02", etc.
-    const levelString = level.toString().padStart(2, '0'); 
-    
-    // 1. Définition des chemins
-    // tempPath : fichier temporaire où on écrit le code reçu du frontend
-    const tempPath = path.join(__dirname, `temp_level${levelString}.py`);
-    // testPath : chemin vers ton fichier test_level01.py dans le dossier Exercices
-    const testPath = path.resolve(__dirname, '../../Exercices', `test_level${levelString}.py`);
+function parseLevel(level) {
+    const numeric = typeof level === 'string' ? Number.parseInt(level, 10) : level;
+    if (!Number.isInteger(numeric)) return null;
+    if (numeric < 1 || numeric > 10) return null;
+    return numeric.toString().padStart(2, '0');
+}
 
-    // Vérification de sécurité : le test existe-t-il ?
+function getTestPath(levelString) {
+    return path.resolve(__dirname, '../../Exercices', `test_level${levelString}.py`);
+}
+
+async function createTempPlayerFile(levelString, code) {
+    const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mkarp-'));
+    const tempPath = path.join(tempDir, `level${levelString}.py`);
+    await fsp.writeFile(tempPath, code, 'utf8');
+    return { tempDir, tempPath };
+}
+
+function runPytestInDocker({ levelString, playerFilePath, testFilePath }) {
+    const args = [
+        'run',
+        '--rm',
+        '-v',
+        `${playerFilePath}:/app/level${levelString}.py`,
+        '-v',
+        `${testFilePath}:/app/test_script.py`,
+        DOCKER_IMAGE,
+        'pytest',
+        '/app/test_script.py',
+    ];
+
+    return new Promise((resolve, reject) => {
+        const child = spawn('docker', args, { windowsHide: true });
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk.toString();
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk.toString();
+        });
+
+        child.on('error', (err) => {
+            reject(err);
+        });
+
+        child.on('close', (code) => {
+            resolve({ exitCode: code ?? 1, stdout, stderr });
+        });
+    });
+}
+
+app.post('/run', async (req, res) => {
+    const { code, level } = req.body ?? {};
+
+    if (typeof code !== 'string') {
+        return res.status(400).json({ success: false, output: 'ERREUR : champ "code" invalide.' });
+    }
+    if (code.length > MAX_CODE_CHARS) {
+        return res.status(413).json({ success: false, output: `ERREUR : code trop volumineux (max ${MAX_CODE_CHARS} caractères).` });
+    }
+
+    const levelString = parseLevel(level);
+    if (!levelString) {
+        return res.status(400).json({ success: false, output: 'ERREUR : champ "level" invalide (attendu 1..10).' });
+    }
+
+    const testPath = getTestPath(levelString);
     if (!fs.existsSync(testPath)) {
-        return res.status(404).json({ 
-            success: false, 
-            output: `ERREUR : Le fichier de test Exercices/test_level${levelString}.py est introuvable.` 
+        return res.status(404).json({
+            success: false,
+            output: `ERREUR : Le fichier de test Exercices/test_level${levelString}.py est introuvable.`,
         });
     }
 
-    // 2. Écriture du code du joueur sur le disque du serveur
-    fs.writeFileSync(tempPath, code);
+    let tempDir = null;
+    let tempPath = null;
 
-    // 3. Commande Docker
-    // IMPORTANT : On monte le code du joueur sur /app/level${levelString}.py
-    // pour que l'import "from level01 import ..." dans le test fonctionne.
-    const dockerCmd = `docker run --rm \
-        -v "${tempPath}:/app/level${levelString}.py" \
-        -v "${testPath}:/app/test_script.py" \
-        kramp-sandbox pytest /app/test_script.py`;
+    try {
+        const tmp = await createTempPlayerFile(levelString, code);
+        tempDir = tmp.tempDir;
+        tempPath = tmp.tempPath;
 
-    console.log(`Exécution du Niveau ${levelString}...`);
+        const { exitCode, stdout, stderr } = await runPytestInDocker({
+            levelString,
+            playerFilePath: tempPath,
+            testFilePath: testPath,
+        });
 
-    exec(dockerCmd, (error, stdout, stderr) => {
-        // Nettoyage : on supprime le fichier temporaire
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-
-        // success est vrai si pytest retourne 0 (tous les tests passent)
-        const success = !error;
-        
-        // Génération du flag dynamique
+        const success = exitCode === 0;
         let flag = null;
         if (success) {
             const options = FLAG_OPTIONS[levelString] || ['GG'];
             flag = options[Math.floor(Math.random() * options.length)];
         }
 
-        res.json({ 
-            success: success, 
-            output: stdout || stderr, 
-            flag: flag 
-        });
-    });
+        const output = [stdout, stderr].filter(Boolean).join('\n');
+        return res.json({ success, output, flag });
+    } catch (err) {
+        const message = err && typeof err.message === 'string' ? err.message : String(err);
+        const output = message.includes('ENOENT')
+            ? 'ERREUR : docker est introuvable. Vérifie que Docker Desktop est installé et que la commande "docker" est disponible.'
+            : `ERREUR : exécution impossible. ${message}`;
+        return res.status(500).json({ success: false, output });
+    } finally {
+        if (tempDir) {
+            try {
+                await fsp.rm(tempDir, { recursive: true, force: true });
+            } catch {
+                // ignore cleanup errors
+            }
+        } else if (tempPath) {
+            try {
+                await fsp.rm(tempPath, { force: true });
+            } catch {
+                // ignore cleanup errors
+            }
+        }
+    }
 });
-
-const PORT = 5000;
 app.listen(PORT, () => {
-    console.log(`========================================`);
-    console.log(`🚀 SERVEUR MKARP ACTIF SUR LE PORT ${PORT}`);
-    console.log(`🛠️  PRET POUR LES TESTS UNITAIRES`);
-    console.log(`========================================`);
+    console.info(`MKARP backend listening on port ${PORT}`);
 });

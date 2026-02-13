@@ -1,16 +1,20 @@
-# React + Vite
+# MKARP Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interface React/Vite de l'escape game : éditeur Python (Monaco) + affichage des résultats de tests.
 
-Currently, two official plugins are available:
+## Démarrage
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+`npm install`
 
-## React Compiler
+`npm run dev`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Le frontend appelle le backend sur `http://localhost:5000` par défaut.
 
-## Expanding the ESLint configuration
+## Configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- `VITE_BACKEND_URL` : URL du backend (ex: `http://localhost:5000`).
+
+## Qualité
+
+- Lint : `npm run lint`
+- Build : `npm run build`

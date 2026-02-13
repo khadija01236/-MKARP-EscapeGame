@@ -1,5 +1,16 @@
 {
-  "dependencies": {
-    "init": "^0.1.2"
+  "name": "mkarp-escape-game",
+  "private": true,
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "scripts": {
+    "build:sandbox": "docker build -t kramp-sandbox -f sandbox/Dockerfile sandbox",
+    "install:all": "npm --prefix app/backend install && npm --prefix app/frontend install",
+    "start:backend": "npm --prefix app/backend run start",
+    "dev:frontend": "npm --prefix app/frontend run dev",
+    "dev": "concurrently --kill-others-on-fail -n backend,frontend -c green,cyan \"npm run start:backend\" \"npm run dev:frontend\"",
+    "build:frontend": "npm --prefix app/frontend run build",
+    "lint:frontend": "npm --prefix app/frontend run lint"
   }
 }
